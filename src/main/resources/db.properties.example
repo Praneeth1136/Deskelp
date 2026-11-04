@@ -1,0 +1,3 @@
+db.url=jdbc:mysql://localhost:3306/deskelp?useSSL=false&serverTimezone=Asia/Kolkata
+db.username=root
+db.password=root

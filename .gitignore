@@ -1,0 +1,42 @@
+# =============================================================
+# Deskelp .gitignore
+# Protects all credentials, build output, and local dependencies
+# =============================================================
+
+# Local database credentials & secrets (DO NOT COMMIT)
+src/main/resources/db.properties
+*.properties.local
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+frontend/*.local
+
+# Maven-generated files & compiled classes
+target/
+*.class
+*.war
+*.jar
+
+# Eclipse & IDE-generated files
+.settings/
+.classpath
+.project
+.factorypath
+.metadata/
+Servers/
+.idea/
+*.iml
+.vscode/
+
+# React / Node dependencies & build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+frontend/package-lock.json
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+*.log

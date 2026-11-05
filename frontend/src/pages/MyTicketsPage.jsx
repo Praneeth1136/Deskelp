@@ -1,22 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ticketApi } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { PriorityBadge, StatusBadge, SlaBadge } from '../components/Badge';
+import { PriorityBadge, StatusBadge, SlaBadge, SlaCountdown } from '../components/Badge';
+import { TicketFilters } from '../components/TicketFilters';
 
 export const MyTicketsPage = () => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [filter, setFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [priorityFilter, setPriorityFilter] = useState('ALL');
 
+  const { showToast } = useToast();
   const location = useLocation();
-  const isCreated = new URLSearchParams(location.search).get('created');
 
   useEffect(() => {
+    const isCreated = new URLSearchParams(location.search).get('created');
+    if (isCreated) {
+      showToast('Ticket created successfully! IT team will review it shortly.', 'success');
+    }
     fetchTickets();
-  }, []);
+  }, [location.search]);
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -26,15 +34,39 @@ export const MyTicketsPage = () => {
         setTickets(res.data.data || []);
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to fetch tickets');
+      showToast(err.response?.data?.error || err.message || 'Failed to fetch tickets', 'error');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setCategoryFilter('ALL');
+    setPriorityFilter('ALL');
+  };
+
   const filteredTickets = tickets.filter((t) => {
-    if (filter === 'ALL') return true;
-    return t.status === filter;
+    // Status check
+    if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
+
+    // Category check
+    if (categoryFilter !== 'ALL' && t.category !== categoryFilter) return false;
+
+    // Priority check
+    if (priorityFilter !== 'ALL' && t.priority !== priorityFilter) return false;
+
+    // Search query check (ID, title, description, category)
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase().replace('#', '').trim();
+      const idMatch = t.ticketId.toString().includes(q);
+      const titleMatch = (t.title || '').toLowerCase().includes(q);
+      const catMatch = (t.category || '').toLowerCase().includes(q);
+      if (!idMatch && !titleMatch && !catMatch) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -51,7 +83,7 @@ export const MyTicketsPage = () => {
               My Support Tickets
             </h1>
             <p className="text-sm text-[#718193]">
-              Review all technical requests created under your employee account.
+              Review and track all technical requests created under your employee account.
             </p>
           </div>
 
@@ -63,34 +95,20 @@ export const MyTicketsPage = () => {
           </Link>
         </div>
 
-        {isCreated && (
-          <div className="mb-6 p-4 rounded-lg bg-[#edf9f2] border border-[#a6d9bc] text-[#207343] text-sm flex items-center justify-between">
-            <span>Ticket created successfully! Our support team will review and assign it shortly.</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Filter bar */}
-        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
-          {['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
-                filter === s
-                  ? 'bg-[#12355b] text-white'
-                  : 'bg-white border border-[#dce5ef] text-[#526477] hover:bg-[#f8fafc]'
-              }`}
-            >
-              {s.replace('_', ' ')}
-            </button>
-          ))}
-        </div>
+        {/* Live Search and Filters */}
+        <TicketFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          categoryFilter={categoryFilter}
+          onCategoryChange={setCategoryFilter}
+          priorityFilter={priorityFilter}
+          onPriorityChange={setPriorityFilter}
+          onReset={handleResetFilters}
+          totalCount={tickets.length}
+          filteredCount={filteredTickets.length}
+        />
 
         {/* Tickets Table Panel */}
         <div className="bg-white border border-[#dce5ef] rounded-xl shadow-sm overflow-hidden">
@@ -101,18 +119,27 @@ export const MyTicketsPage = () => {
             </div>
           ) : filteredTickets.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-base font-bold text-[#173b5f] mb-1">No tickets found</p>
+              <p className="text-base font-bold text-[#173b5f] mb-1">No matching tickets found</p>
               <p className="text-xs text-[#718193] mb-5">
-                {filter === 'ALL'
+                {tickets.length === 0
                   ? "You haven't submitted any support requests yet."
-                  : `No tickets with status "${filter}".`}
+                  : 'Try clearing your filters or adjusting your search term.'}
               </p>
-              <Link
-                to="/create-ticket"
-                className="px-4 py-2 bg-[#1769aa] text-white text-xs font-bold rounded-md hover:bg-[#0d4f87]"
-              >
-                Create your first ticket
-              </Link>
+              {tickets.length === 0 ? (
+                <Link
+                  to="/create-ticket"
+                  className="px-4 py-2 bg-[#1769aa] text-white text-xs font-bold rounded-md hover:bg-[#0d4f87]"
+                >
+                  Create your first ticket
+                </Link>
+              ) : (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-4 py-2 border border-[#b8c8d8] text-[#1769aa] text-xs font-bold rounded-md hover:bg-slate-50"
+                >
+                  Clear All Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -124,9 +151,8 @@ export const MyTicketsPage = () => {
                     <th className="py-3.5 px-4">Category</th>
                     <th className="py-3.5 px-4">Priority</th>
                     <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">Assigned Agent</th>
-                    <th className="py-3.5 px-4">Created Date</th>
-                    <th className="py-3.5 px-4">SLA Deadline</th>
+                    <th className="py-3.5 px-4">Assigned Specialist</th>
+                    <th className="py-3.5 px-4">Live SLA Countdown</th>
                     <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
@@ -143,11 +169,12 @@ export const MyTicketsPage = () => {
                         >
                           {ticket.title}
                         </Link>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="font-semibold text-[#526477]">
-                          {ticket.category}
+                        <span className="block text-[10px] text-[#718193] font-normal">
+                          Created {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : '-'}
                         </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-[#526477]">
+                        {ticket.category}
                       </td>
                       <td className="py-3.5 px-4">
                         <PriorityBadge priority={ticket.priority} />
@@ -162,15 +189,10 @@ export const MyTicketsPage = () => {
                           <span className="text-[#a0aec0] italic">Unassigned</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap text-[#718193]">
-                        {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : '-'}
-                      </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex flex-col gap-1">
+                          <SlaCountdown dueAt={ticket.dueAt} status={ticket.status} />
                           <SlaBadge dueAt={ticket.dueAt} status={ticket.status} />
-                          <span className="text-[10px] text-[#718193]">
-                            {ticket.dueAt ? new Date(ticket.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right">
@@ -194,4 +216,3 @@ export const MyTicketsPage = () => {
     </div>
   );
 };
-

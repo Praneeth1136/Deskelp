@@ -1,19 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { PriorityBadge, StatusBadge, SlaBadge } from '../components/Badge';
+import { PriorityBadge, StatusBadge, SlaBadge, SlaCountdown } from '../components/Badge';
+import { TicketFilters } from '../components/TicketFilters';
 
 export const AdminDashboardPage = () => {
   const [tickets, setTickets] = useState([]);
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [filter, setFilter] = useState('ALL');
   const [assigningId, setAssigningId] = useState(null);
   const [selectedAgents, setSelectedAgents] = useState({});
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [priorityFilter, setPriorityFilter] = useState('ALL');
+
+  const { showToast } = useToast();
 
   useEffect(() => {
     fetchData();
@@ -28,7 +35,7 @@ export const AdminDashboardPage = () => {
         setAgents(res.data.data.agents || []);
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to fetch admin data');
+      showToast(err.response?.data?.error || err.message || 'Failed to fetch admin data', 'error');
     } finally {
       setLoading(false);
     }
@@ -44,25 +51,31 @@ export const AdminDashboardPage = () => {
   const handleAssign = async (ticketId) => {
     const agentId = selectedAgents[ticketId];
     if (!agentId) {
-      setError('Please select an agent to assign');
+      showToast('Please select a support agent from the dropdown first', 'warning');
       return;
     }
 
     setAssigningId(ticketId);
-    setError('');
-    setMessage('');
 
     try {
       const res = await adminApi.assignTicket(ticketId, agentId);
       if (res.data?.success) {
-        setMessage(`Ticket #${ticketId} assigned successfully`);
+        const assignedAgent = agents.find((a) => a.userId.toString() === agentId.toString());
+        showToast(`Ticket #${ticketId} assigned to ${assignedAgent?.fullName || 'agent'}!`, 'success');
         fetchData();
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Assignment failed');
+      showToast(err.response?.data?.error || err.message || 'Assignment failed', 'error');
     } finally {
       setAssigningId(null);
     }
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setCategoryFilter('ALL');
+    setPriorityFilter('ALL');
   };
 
   // Metrics
@@ -72,8 +85,20 @@ export const AdminDashboardPage = () => {
   const resolvedTickets = tickets.filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED').length;
 
   const filteredTickets = tickets.filter((t) => {
-    if (filter === 'ALL') return true;
-    return t.status === filter;
+    if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
+    if (categoryFilter !== 'ALL' && t.category !== categoryFilter) return false;
+    if (priorityFilter !== 'ALL' && t.priority !== priorityFilter) return false;
+
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase().replace('#', '').trim();
+      const idMatch = t.ticketId.toString().includes(q);
+      const titleMatch = (t.title || '').toLowerCase().includes(q);
+      const reqMatch = (t.createdByName || '').toLowerCase().includes(q);
+      const agentMatch = (t.assignedToName || '').toLowerCase().includes(q);
+      if (!idMatch && !titleMatch && !reqMatch && !agentMatch) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -89,12 +114,12 @@ export const AdminDashboardPage = () => {
             Global Ticket Management
           </h1>
           <p className="text-sm text-[#718193]">
-            Assign incoming requests, monitor resolution SLA compliance, and oversee team workload.
+            Assign incoming requests, monitor resolution SLA compliance, and oversee specialist workload.
           </p>
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white border border-[#dce5ef] rounded-xl p-5 shadow-sm">
             <span className="text-[11px] font-bold uppercase text-[#718193] block mb-2">Total Tickets</span>
             <strong className="text-3xl font-extrabold text-[#173b5f]">{totalTickets}</strong>
@@ -113,46 +138,38 @@ export const AdminDashboardPage = () => {
           </div>
         </div>
 
-        {message && (
-          <div className="mb-6 p-4 rounded-lg bg-[#edf9f2] border border-[#a6d9bc] text-[#207343] text-sm">
-            {message}
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
-          {['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
-                filter === s
-                  ? 'bg-[#12355b] text-white'
-                  : 'bg-white border border-[#dce5ef] text-[#526477] hover:bg-[#f8fafc]'
-              }`}
-            >
-              {s.replace('_', ' ')}
-            </button>
-          ))}
-        </div>
+        {/* Live Search & Filter Bar */}
+        <TicketFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          categoryFilter={categoryFilter}
+          onCategoryChange={setCategoryFilter}
+          priorityFilter={priorityFilter}
+          onPriorityChange={setPriorityFilter}
+          onReset={handleResetFilters}
+          totalCount={tickets.length}
+          filteredCount={filteredTickets.length}
+        />
 
         {/* Tickets Table Panel */}
         <div className="bg-white border border-[#dce5ef] rounded-xl shadow-sm overflow-hidden">
           {loading ? (
             <div className="p-12 text-center text-sm text-[#718193]">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#1769aa] mb-3"></div>
-              <p>Loading all system tickets...</p>
+              <p>Loading global ticket directory...</p>
             </div>
           ) : filteredTickets.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-base font-bold text-[#173b5f] mb-1">No tickets match this filter</p>
-              <p className="text-xs text-[#718193]">All systems running smoothly.</p>
+              <p className="text-base font-bold text-[#173b5f] mb-1">No tickets match the selected filters</p>
+              <p className="text-xs text-[#718193] mb-4">Try clearing your filters or search keywords.</p>
+              <button
+                onClick={handleResetFilters}
+                className="px-4 py-2 border border-[#b8c8d8] text-[#1769aa] text-xs font-bold rounded-md hover:bg-slate-50"
+              >
+                Clear All Filters
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -164,8 +181,8 @@ export const AdminDashboardPage = () => {
                     <th className="py-3.5 px-4">Requester</th>
                     <th className="py-3.5 px-4">Priority</th>
                     <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">SLA Deadline</th>
-                    <th className="py-3.5 px-4">Assigned Agent / Action</th>
+                    <th className="py-3.5 px-4">Live SLA Countdown</th>
+                    <th className="py-3.5 px-4">Assigned Specialist / Action</th>
                     <th className="py-3.5 px-4 text-right">Details</th>
                   </tr>
                 </thead>
@@ -182,7 +199,7 @@ export const AdminDashboardPage = () => {
                         >
                           {ticket.title}
                         </Link>
-                        <span className="block text-[11px] text-[#718193] font-normal">
+                        <span className="block text-[10px] text-[#718193] font-normal">
                           {ticket.category}
                         </span>
                       </td>
@@ -196,7 +213,10 @@ export const AdminDashboardPage = () => {
                         <StatusBadge status={ticket.status} />
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <SlaBadge dueAt={ticket.dueAt} status={ticket.status} />
+                        <div className="flex flex-col gap-1">
+                          <SlaCountdown dueAt={ticket.dueAt} status={ticket.status} />
+                          <SlaBadge dueAt={ticket.dueAt} status={ticket.status} />
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">
                         {ticket.status === 'OPEN' ? (
@@ -206,7 +226,7 @@ export const AdminDashboardPage = () => {
                               onChange={(e) => handleAgentSelect(ticket.ticketId, e.target.value)}
                               className="px-2.5 py-1.5 border border-[#b8c4d1] rounded text-xs bg-white text-[#1f2937] focus:outline-none focus:border-[#1769aa]"
                             >
-                              <option value="">Select Agent...</option>
+                              <option value="">Select Specialist...</option>
                               {agents.map((ag) => (
                                 <option key={ag.userId} value={ag.userId}>
                                   {ag.fullName}
@@ -251,4 +271,3 @@ export const AdminDashboardPage = () => {
     </div>
   );
 };
-

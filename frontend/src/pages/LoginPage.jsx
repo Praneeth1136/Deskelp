@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const { login } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -17,11 +18,11 @@ export const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     setSubmitting(true);
 
     try {
       const user = await login(email, password);
+      showToast(`Welcome back, ${user.fullName || user.email}!`, 'success');
       if (user.role === 'ADMIN') {
         navigate('/admin');
       } else if (user.role === 'AGENT') {
@@ -30,7 +31,7 @@ export const LoginPage = () => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Invalid email or password');
+      showToast(err.response?.data?.error || err.message || 'Invalid email or password', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -108,12 +109,6 @@ export const LoginPage = () => {
             </div>
           )}
 
-          {error && (
-            <div className="mb-5 p-3 rounded-md bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-              {error}
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-[#263c53] uppercase mb-1.5" htmlFor="email">
@@ -176,4 +171,3 @@ export const LoginPage = () => {
     </div>
   );
 };
-

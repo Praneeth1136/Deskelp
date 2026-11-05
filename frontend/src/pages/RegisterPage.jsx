@@ -1,31 +1,29 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export const RegisterPage = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const { register } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
     if (password.length < 6) {
-      setError('Password must contain at least 6 characters');
+      showToast('Password must contain at least 6 characters', 'error');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      showToast('Passwords do not match', 'error');
       return;
     }
 
@@ -33,12 +31,12 @@ export const RegisterPage = () => {
 
     try {
       const res = await register(fullName, email, password, confirmPassword);
-      setSuccess(res.data?.message || 'Registration successful! Redirecting to login...');
+      showToast(res.data?.message || 'Registration successful! You can now log in.', 'success');
       setTimeout(() => {
         navigate('/login');
-      }, 1500);
+      }, 1000);
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Registration failed');
+      showToast(err.response?.data?.error || err.message || 'Registration failed', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -73,7 +71,7 @@ export const RegisterPage = () => {
             </div>
             <div className="flex items-center gap-3">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#16856b] text-white text-xs font-bold">✓</span>
-              <span>Direct communication with assigned IT agents</span>
+              <span>Direct communication with assigned IT specialists</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#16856b] text-white text-xs font-bold">✓</span>
@@ -103,18 +101,6 @@ export const RegisterPage = () => {
           <p className="text-[#718193] text-sm mb-6">
             Enter your details to register as an employee.
           </p>
-
-          {error && (
-            <div className="mb-5 p-3 rounded-md bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-              {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-5 p-3 rounded-md bg-[#edf9f2] border border-[#a6d9bc] text-[#207343] text-sm">
-              {success}
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -197,4 +183,3 @@ export const RegisterPage = () => {
     </div>
   );
 };
-

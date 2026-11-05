@@ -2,21 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ticketApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { PriorityBadge, StatusBadge, SlaBadge } from '../components/Badge';
+import { PriorityBadge, StatusBadge, SlaBadge, SlaCountdown } from '../components/Badge';
 
 export const TicketDetailsPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [closingTicket, setClosingTicket] = useState(false);
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     fetchDetails();
@@ -30,7 +30,7 @@ export const TicketDetailsPage = () => {
         setData(res.data.data);
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to load ticket');
+      showToast(err.response?.data?.error || err.message || 'Failed to load ticket details', 'error');
     } finally {
       setLoading(false);
     }
@@ -41,38 +41,34 @@ export const TicketDetailsPage = () => {
     if (!commentText.trim()) return;
 
     setSubmittingComment(true);
-    setError('');
-    setMessage('');
 
     try {
       const res = await ticketApi.addComment(id, commentText.trim());
       if (res.data?.success) {
         setCommentText('');
-        setMessage('Comment posted successfully');
+        showToast('Comment posted successfully!', 'success');
         fetchDetails();
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to add comment');
+      showToast(err.response?.data?.error || err.message || 'Failed to add comment', 'error');
     } finally {
       setSubmittingComment(false);
     }
   };
 
   const handleCloseTicket = async () => {
-    if (!window.confirm('Are you sure you want to close this ticket?')) return;
+    if (!window.confirm('Are you sure you want to confirm resolution and close this ticket?')) return;
 
     setClosingTicket(true);
-    setError('');
-    setMessage('');
 
     try {
       const res = await ticketApi.close(id);
       if (res.data?.success) {
-        setMessage('Ticket closed successfully');
+        showToast('Ticket closed successfully! Thank you for confirming resolution.', 'success');
         fetchDetails();
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to close ticket');
+      showToast(err.response?.data?.error || err.message || 'Failed to close ticket', 'error');
     } finally {
       setClosingTicket(false);
     }
@@ -90,17 +86,19 @@ export const TicketDetailsPage = () => {
     );
   }
 
-  if (error && !data) {
+  if (!data) {
     return (
       <div className="min-h-screen flex flex-col bg-[#f4f7fb]">
         <Navbar />
         <div className="w-[92%] max-w-[800px] mx-auto py-16 text-center">
-          <div className="p-6 bg-white border border-[#efb4b4] rounded-xl shadow-sm">
-            <h2 className="text-xl font-bold text-[#a62c2c] mb-2">Access Denied or Not Found</h2>
-            <p className="text-sm text-[#718193] mb-5">{error}</p>
+          <div className="p-8 bg-white border border-[#efb4b4] rounded-xl shadow-sm">
+            <h2 className="text-xl font-bold text-[#a62c2c] mb-2">Ticket Not Found or Access Denied</h2>
+            <p className="text-sm text-[#718193] mb-5">
+              You may not have permission to view this ticket or it does not exist.
+            </p>
             <Link
               to="/dashboard"
-              className="px-4 py-2 bg-[#1769aa] text-white text-xs font-bold rounded-md hover:bg-[#0d4f87]"
+              className="px-5 py-2.5 bg-[#1769aa] text-white text-xs font-bold rounded-md hover:bg-[#0d4f87]"
             >
               Return to Dashboard
             </Link>
@@ -129,23 +127,12 @@ export const TicketDetailsPage = () => {
       <Navbar />
 
       <main className="w-[92%] max-w-[1100px] mx-auto py-10 flex-1">
-        <div className="mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <Link to={getBackPath()} className="text-xs text-[#1769aa] font-semibold hover:underline">
             &larr; Back to Tickets List
           </Link>
+          <span className="text-xs text-[#718193] font-mono">ID: #{ticket?.ticketId}</span>
         </div>
-
-        {message && (
-          <div className="mb-6 p-4 rounded-lg bg-[#edf9f2] border border-[#a6d9bc] text-[#207343] text-sm">
-            {message}
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-            {error}
-          </div>
-        )}
 
         {/* Ticket Header Card */}
         <div className="bg-white border border-[#dce5ef] rounded-xl p-8 shadow-sm mb-6">
@@ -181,7 +168,7 @@ export const TicketDetailsPage = () => {
             </div>
 
             <div>
-              <span className="text-[#778799] block mb-1">Assigned Agent</span>
+              <span className="text-[#778799] block mb-1">Assigned Specialist</span>
               <strong className="text-[#263f58] font-semibold">
                 {ticket?.assignedToName ? ticket.assignedToName : <span className="text-[#a0aec0] italic">Unassigned</span>}
               </strong>
@@ -195,8 +182,11 @@ export const TicketDetailsPage = () => {
             </div>
 
             <div>
-              <span className="text-[#778799] block mb-1">SLA Target Status</span>
-              <SlaBadge dueAt={ticket?.dueAt} status={ticket?.status} />
+              <span className="text-[#778799] block mb-1">Live SLA Target</span>
+              <div className="flex flex-col gap-0.5">
+                <SlaCountdown dueAt={ticket?.dueAt} status={ticket?.status} />
+                <SlaBadge dueAt={ticket?.dueAt} status={ticket?.status} />
+              </div>
             </div>
           </div>
 
@@ -212,15 +202,15 @@ export const TicketDetailsPage = () => {
 
           {/* Close Ticket Button (For Creator when RESOLVED) */}
           {canClose && (
-            <div className="mt-6 p-4 rounded-lg bg-[#edf9f2] border border-[#a6d9bc] flex items-center justify-between">
+            <div className="mt-6 p-4 rounded-lg bg-[#edf9f2] border border-[#a6d9bc] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <strong className="text-[#207343] text-sm block">Issue has been marked Resolved</strong>
-                <span className="text-xs text-[#526477]">Please verify the solution. If satisfied, click to close this ticket.</span>
+                <span className="text-xs text-[#526477]">Please test the solution. If resolved to your satisfaction, click below to close this ticket.</span>
               </div>
               <button
                 onClick={handleCloseTicket}
                 disabled={closingTicket}
-                className="px-4 py-2 bg-[#24824f] text-white text-xs font-bold uppercase rounded-md hover:bg-[#17683c] transition-colors"
+                className="px-5 py-2.5 bg-[#24824f] text-white text-xs font-bold uppercase rounded-md hover:bg-[#17683c] transition-colors whitespace-nowrap shadow-sm disabled:opacity-50"
               >
                 {closingTicket ? 'Closing...' : 'Confirm & Close Ticket'}
               </button>
@@ -237,7 +227,7 @@ export const TicketDetailsPage = () => {
             </h3>
 
             {comments.length === 0 ? (
-              <p className="text-xs text-[#718193] italic py-4 text-center border border-dashed border-[#dce5ef] rounded-lg">
+              <p className="text-xs text-[#718193] italic py-6 text-center border border-dashed border-[#dce5ef] rounded-lg">
                 No comments posted yet.
               </p>
             ) : (
@@ -337,4 +327,3 @@ export const TicketDetailsPage = () => {
     </div>
   );
 };
-

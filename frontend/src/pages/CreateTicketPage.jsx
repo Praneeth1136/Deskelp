@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ticketApi } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 
@@ -9,10 +10,10 @@ export const CreateTicketPage = () => {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('SOFTWARE');
   const [priority, setPriority] = useState('MEDIUM');
-  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const getSlaHours = () => {
     switch (priority) {
@@ -26,15 +27,14 @@ export const CreateTicketPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (title.length > 150) {
-      setError('Title cannot exceed 150 characters');
+      showToast('Title cannot exceed 150 characters', 'error');
       return;
     }
 
     if (description.length > 2000) {
-      setError('Description cannot exceed 2000 characters');
+      showToast('Description cannot exceed 2000 characters', 'error');
       return;
     }
 
@@ -49,10 +49,11 @@ export const CreateTicketPage = () => {
       });
 
       if (res.data?.success) {
+        showToast('Ticket created successfully!', 'success');
         navigate('/my-tickets?created=true');
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Ticket creation failed');
+      showToast(err.response?.data?.error || err.message || 'Ticket creation failed', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -74,12 +75,6 @@ export const CreateTicketPage = () => {
             Submit a new technical incident. IT support agents will be assigned based on category and priority SLA.
           </p>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-            {error}
-          </div>
-        )}
 
         <div className="bg-white border border-[#dce5ef] rounded-xl p-8 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -191,4 +186,3 @@ export const CreateTicketPage = () => {
     </div>
   );
 };
-

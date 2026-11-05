@@ -107,6 +107,18 @@ npm run dev
 
 ---
 
+## 📮 Postman API Collection
+
+A complete, pre-configured Postman Collection is included in the project root:
+- File: [`deskelp-api.postman_collection.json`](deskelp-api.postman_collection.json)
+
+### Features:
+- **Auto-Token Extraction**: Logging in automatically saves the JWT token to the `{{token}}` collection variable.
+- **Pre-configured Endpoints**: Covers all 13 REST API endpoints across Authentication, Employee Tickets, Admin Assignment, and Agent Status workflows.
+- **Import & Test**: Open Postman &rarr; Click **Import** &rarr; Select `deskelp-api.postman_collection.json` &rarr; Send requests!
+
+---
+
 ## 🔑 Demo Credentials
 
 | Role | Email | Password |

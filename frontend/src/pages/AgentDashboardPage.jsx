@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { agentApi } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { PriorityBadge, StatusBadge, SlaBadge } from '../components/Badge';
+import { PriorityBadge, StatusBadge, SlaBadge, SlaCountdown } from '../components/Badge';
+import { TicketFilters } from '../components/TicketFilters';
 
 export const AgentDashboardPage = () => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [priorityFilter, setPriorityFilter] = useState('ALL');
+
+  const { showToast } = useToast();
 
   useEffect(() => {
     fetchTickets();
@@ -24,7 +32,7 @@ export const AgentDashboardPage = () => {
         setTickets(res.data.data || []);
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to fetch agent tickets');
+      showToast(err.response?.data?.error || err.message || 'Failed to fetch agent tickets', 'error');
     } finally {
       setLoading(false);
     }
@@ -32,21 +40,42 @@ export const AgentDashboardPage = () => {
 
   const handleUpdateStatus = async (ticketId, newStatus) => {
     setUpdatingId(ticketId);
-    setError('');
-    setMessage('');
 
     try {
       const res = await agentApi.updateStatus(ticketId, newStatus);
       if (res.data?.success) {
-        setMessage(`Ticket #${ticketId} updated to ${newStatus}`);
+        showToast(`Ticket #${ticketId} status updated to ${newStatus.replace('_', ' ')}!`, 'success');
         fetchTickets();
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Status update failed');
+      showToast(err.response?.data?.error || err.message || 'Status update failed', 'error');
     } finally {
       setUpdatingId(null);
     }
   };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setCategoryFilter('ALL');
+    setPriorityFilter('ALL');
+  };
+
+  const filteredTickets = tickets.filter((t) => {
+    if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
+    if (categoryFilter !== 'ALL' && t.category !== categoryFilter) return false;
+    if (priorityFilter !== 'ALL' && t.priority !== priorityFilter) return false;
+
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase().replace('#', '').trim();
+      const idMatch = t.ticketId.toString().includes(q);
+      const titleMatch = (t.title || '').toLowerCase().includes(q);
+      const reqMatch = (t.createdByName || '').toLowerCase().includes(q);
+      if (!idMatch && !titleMatch && !reqMatch) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f4f7fb]">
@@ -61,21 +90,24 @@ export const AgentDashboardPage = () => {
             My Assigned Queue
           </h1>
           <p className="text-sm text-[#718193]">
-            Tickets assigned to you, ordered automatically by priority (Critical & High first).
+            Tickets assigned directly to you, auto-sorted by priority SLA (Critical & High at top).
           </p>
         </div>
 
-        {message && (
-          <div className="mb-6 p-4 rounded-lg bg-[#edf9f2] border border-[#a6d9bc] text-[#207343] text-sm">
-            {message}
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-[#fff1f1] border border-[#efb4b4] text-[#a62c2c] text-sm">
-            {error}
-          </div>
-        )}
+        {/* Live Search & Filter Bar */}
+        <TicketFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          categoryFilter={categoryFilter}
+          onCategoryChange={setCategoryFilter}
+          priorityFilter={priorityFilter}
+          onPriorityChange={setPriorityFilter}
+          onReset={handleResetFilters}
+          totalCount={tickets.length}
+          filteredCount={filteredTickets.length}
+        />
 
         {/* Assigned Tickets Table */}
         <div className="bg-white border border-[#dce5ef] rounded-xl shadow-sm overflow-hidden">
@@ -84,10 +116,22 @@ export const AgentDashboardPage = () => {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#1769aa] mb-3"></div>
               <p>Loading your assigned queue...</p>
             </div>
-          ) : tickets.length === 0 ? (
+          ) : filteredTickets.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-base font-bold text-[#173b5f] mb-1">Queue is empty!</p>
-              <p className="text-xs text-[#718193]">You currently have no tickets assigned to work on.</p>
+              <p className="text-base font-bold text-[#173b5f] mb-1">Queue is clear!</p>
+              <p className="text-xs text-[#718193] mb-4">
+                {tickets.length === 0
+                  ? 'You currently have no tickets assigned to work on.'
+                  : 'No tickets match the current search or filters.'}
+              </p>
+              {tickets.length > 0 && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-4 py-2 border border-[#b8c8d8] text-[#1769aa] text-xs font-bold rounded-md hover:bg-slate-50"
+                >
+                  Clear All Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -99,13 +143,13 @@ export const AgentDashboardPage = () => {
                     <th className="py-3.5 px-4">Title</th>
                     <th className="py-3.5 px-4">Requester</th>
                     <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">SLA Deadline</th>
+                    <th className="py-3.5 px-4">Live SLA Countdown</th>
                     <th className="py-3.5 px-4">Action</th>
                     <th className="py-3.5 px-4 text-right">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e1e8ef] text-[#3e5368]">
-                  {tickets.map((ticket) => (
+                  {filteredTickets.map((ticket) => (
                     <tr key={ticket.ticketId} className="hover:bg-[#eef6fc] transition-colors">
                       <td className="py-3.5 px-4">
                         <PriorityBadge priority={ticket.priority} />
@@ -120,7 +164,7 @@ export const AgentDashboardPage = () => {
                         >
                           {ticket.title}
                         </Link>
-                        <span className="block text-[11px] text-[#718193] font-normal">
+                        <span className="block text-[10px] text-[#718193] font-normal">
                           {ticket.category}
                         </span>
                       </td>
@@ -131,7 +175,10 @@ export const AgentDashboardPage = () => {
                         <StatusBadge status={ticket.status} />
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <SlaBadge dueAt={ticket.dueAt} status={ticket.status} />
+                        <div className="flex flex-col gap-1">
+                          <SlaCountdown dueAt={ticket.dueAt} status={ticket.status} />
+                          <SlaBadge dueAt={ticket.dueAt} status={ticket.status} />
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">
                         {ticket.status === 'ASSIGNED' && (
@@ -181,4 +228,3 @@ export const AgentDashboardPage = () => {
     </div>
   );
 };
-
